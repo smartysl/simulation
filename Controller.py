@@ -12,12 +12,10 @@ class Controller:
             while(self.queue and self.queue[0].startTime==events[0].startTime):
                 events.append(self.queue.pop(0)) #取出所用同时刻发生的事件
             newEvents=[]
-            for event in events:
-                newEvents+=self.channel.notify(event)
+            newEvents+=self.channel.notify(events)
             for new in newEvents:
                 i=0
                 while(i<len(self.queue) and new.startTime>self.queue[i].startTime):
                     i+=1
                 self.queue.insert(i,new) #将新事件按照时间顺序插入队列
-
 

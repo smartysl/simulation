@@ -19,73 +19,61 @@ class Channel:
         self.time=start
         self.lastTime=start
         self.nodeGroup=nodeGroup
-        self.preEvent=None
     def register(self,node):
         self.nodeGroup.append(node)
     def unregister(self,node):
         self.nodeGroup.pop(self.nodeGroup.index(node))
-    def notify(self,event):
+    def notify(self,events):
         buffer=[]
         for node in self.nodeGroup:
-            node.update(event,self.preEvent,buffer,self.time,self.lastTime)#将当前信道时间传入节点中以判断是否发生冲突
-        self.time=max(self.time,event.endTime) #记录当前时间
-        self.lastTime=max(self.lastTime,self.time) #记录事件中最后的时间
-        for e in buffer:
-            self.lastTime=max(self.lastTime,e.endTime)
-        self.preEvent=event
+            node.update(events,buffer,self.time,self.lastTime)#将当前信道时间传入节点中以判断是否发生冲突
+        for event in events:  #记录当前时间
+            self.time=max(self.time,event.endTime)
+        for newEvent in buffer:
+            self.lastTime=max(self.lastTime,newEvent.endTime)
         return buffer
 class Node:
     def __init__(self,id):
         self.id=id
-        self.status=DORMANT_STATE
+        self.status=LINSTENING_STATE
         self.sendBuffer=[]#缓冲已发送的信息以便冲突后回滚
-        self.receiveBuffer=[]
-        self.protocol=Protocol(self)
+        self.protocol=Protocol()
         self.logger=Logger()
-    def eventConflict(self,event,preEvent):
-        return event.startTime>preEvent.startTime
-    def update(self,event,preEvent,buffer,time,lastTime):
+        self.time=0
+    def update(self,events,buffer,time,lastTime):
         # 调用相关协议,返回回调事件并加入buffer中
         # 每个事件都要等确认无冲突后才能log
-        # 发送者确认无冲突后清空缓冲，接收者无论是否冲突都会清空缓冲
         # 所有协议调用的前提是有冲突发生
-        # 冲突分为事件冲突和信道冲突
-        isSafe=True #标记缓冲区中事件安全
-        if event.startTime<time: #有冲突发生
-            if self.eventConflict(event,preEvent): #事件冲突
-                if event.sender==self:
-                    new=Event(**event.__dict__)
-                    new.endTime=new.endTime-new.startTime+lastTime
-                    new.startTime=lastTime #更新时间戳
-                    buffer.append(new) #重发
-            else: #信道冲突
-                isSafe=False
-                if event.sender==self:
-                    pass #调用协议
-                elif event.receiver==self:
-                    pass #调用协议
-                else:
-                    pass #调用协议
-        if isSafe:
-            while(self.sendBuffer):
-                if self.sendBuffer[0].startTime==preEvent.startTime: #通过时间戳判断是否是堆积的消息
-                    self.logger.log(SendMessage(self.sendBuffer.pop(0)))
-                else:
-                    newEvent=self.sendBuffer.pop(0)
-                    newEvent.endTime = newEvent.endTime - newEvent.startTime + time
-                    newEvent.startTime = time
-                    buffer.append(newEvent) #如果缓冲区有未发送的event,需要在冲突解决后打上新的时间戳,并推入buffer中
-            while(self.receiveBuffer):
-                self.logger.log(ReceiveMessage(self.receiveBuffer.pop(0)))
+        self.time=time
+        self.buffer=buffer
+        if events[0].startTime < time:  # 有事件冲突发生
+            for event in events:
+                if event.sender == self:
+                    self.resend(event,buffer,lastTime)
+            return buffer
+        if len(events)>1: #发生信道冲突
+            self.protocol.handle(self,events)
         else:
-            self.receiveBuffer=[] #清空接受缓冲区
-        # 这里设计的不好
-        if not (event.startTime<time and self.eventConflict(event,preEvent)):
-            if event.sender == self:
-                self.sendBuffer.append(event) #只要不是事件冲突都将缓冲该发送事件
+            event=events[0]
+            if event.code==NOTICE_EVENT:
+                self.protocol.retry(self)
+            else:
+                while(self.sendBuffer):
+                    newEvent=self.sendBuffer.pop(0)
+                    self.resend(newEvent,buffer,time)
+            if event.sender==self:
+                self.logger.log(SendMessage(event))
             elif event.receiver==self:
-                self.receiveBuffer.append(event)
-    def talk(self,parameter,buffer):
-        buffer.append(Event(**parameter))
+                self.logger.log(ReceiveMessage(event))
+        return buffer
+    def resend(self,event,buffer,lastTime):
+        new = Event(**event.__dict__)
+        new.endTime = new.endTime - new.startTime + lastTime
+        new.startTime = lastTime  # 更新时间戳
+        buffer.append(new)  # 重发
+    def send(self,params,buffer):
+        buffer.append(Event(**params))
+    def load(self,event):
+        self.sendBuffer.append(event)
 
 
