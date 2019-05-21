@@ -44,8 +44,10 @@ class Node:
         # 调用相关协议,返回回调事件并加入buffer中
         # 每个事件都要等确认无冲突后才能log
         # 所有协议调用的前提是有冲突发生
-        self.time=time
         self.buffer=buffer
+        self.lastTime=time
+        for event in events:  #记录当前时间
+            self.lastTime=max(self.lastTime,event.endTime)
         if events[0].startTime < time:  # 有事件冲突发生
             for event in events:
                 if event.sender == self:
@@ -60,7 +62,7 @@ class Node:
             else:
                 while(self.sendBuffer):
                     newEvent=self.sendBuffer.pop(0)
-                    self.resend(newEvent,buffer,time)
+                    self.resend(newEvent,buffer,lastTime)
             if event.sender==self:
                 self.logger.log(SendMessage(event))
             elif event.receiver==self:

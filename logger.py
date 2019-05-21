@@ -5,6 +5,8 @@ class SendMessage(Message):
     def __init__(self,event):
         super().__init__(event)
     def __str__(self):
+        if not self.event.receiver:
+            return str(self.event.startTime)+":节点"+str(self.event.sender.id)+"通知冲突"
         return str(self.event.startTime)+":节点"+str(self.event.sender.id)+"发送了"+str(self.event.body)+"向"+str(self.event.receiver.id)
 class ReceiveMessage(Message):
     def __init__(self,event):
