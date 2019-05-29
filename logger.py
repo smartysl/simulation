@@ -1,3 +1,4 @@
+import Models
 class Message:
     def __init__(self,event):
         self.event=event
@@ -6,6 +7,8 @@ class SendMessage(Message):
         super().__init__(event)
     def __str__(self):
         if not self.event.receiver:
+            if self.event.code==Models.APPLY_EVENT:
+                return str(self.event.startTime) + ":节点" + str(self.event.sender.id) + "申请发言"
             return str(self.event.startTime)+":节点"+str(self.event.sender.id)+"通知冲突"
         return str(self.event.startTime)+":节点"+str(self.event.sender.id)+"发送了"+str(self.event.body)+"向"+str(self.event.receiver.id)
 class ReceiveMessage(Message):
