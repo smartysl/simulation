@@ -4,6 +4,7 @@ from collections import defaultdict
 APPLY_EVENT=0
 MESSAGE_EVENT=1
 NOTICE_EVENT=2
+SLIENCE_EVENT=3
 DORMANT_STATE=0
 LINSTENING_STATE=1
 LIGHT_SPEED=3*(10**8)
@@ -25,6 +26,7 @@ class Channel:
         self.nodeGroup=None
         self.delayMap=defaultdict()
         self.maxDelay=0
+        self.slience=True
     def addGroup(self,group):
         self.nodeGroup=group
         self.buildDelayMap()
@@ -58,6 +60,9 @@ class Channel:
         self.newConflixNodes=[] # 延时更新节点状态
         for event in events:  #记录当前时间
             self.time=max(self.time,event.endTime)
+        if not self.slience and not buffer:
+            buffer.append(Event(SLIENCE_EVENT,None,None,None,self.time,self.time))
+            self.slience=True
         self.flushProtocol()
         if self.reimbursedTime!=0:
             if self.reimbursedTime > 0:  # 补偿时延对buffer中时间的影响
@@ -94,6 +99,16 @@ class Node:
         if self.applyForEvent(events): #只要当前事件中有未申请的信息，后续一律不处理
             self.channel.realHappen=False
             return
+        if events[0].code == SLIENCE_EVENT: # 当前事件为静默时需要向后推进
+            if self.id == 0:
+                self.protocol.updateSearchState('backward')
+            if self.conflix:  # 冲突中的节点尝试重发
+                for newEvent in self.sendBuffer[::-1]:
+                    if newEvent.code == APPLY_EVENT:
+                        self.sendBuffer.remove(newEvent)
+                        self.protocol.retry(self, newEvent)
+                        break
+            return
         conflixEvents,otherEvents = self.sepEvent(events)
         if otherEvents:
             return # 如果有插队的事件后续不做处理
@@ -103,6 +118,7 @@ class Node:
         else:
             event=conflixEvents[0] #这里只有一个真正的冲突/事件
             if event.code==NOTICE_EVENT:
+                self.channel.slience=False
                 if self.id==0:
                     self.channel.reimbursedTime=(event.sender.id%10)*self.channel.maxDelay #需要延迟更新时间
                 if self.conflix: #冲突中的节点尝试重发

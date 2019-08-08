@@ -7,8 +7,8 @@ class Protocol:
         return cls.instance
     def __init__(self):#这里应当记录协议状态
         self.searchStart=0
-        self.searchEnd=4
-        self.searchStack=[0,4]
+        self.searchEnd=32
+        self.searchStack=[0,32]
         self.conflix=False
     def handle(self,node,events):
         self.conflix=True
@@ -49,7 +49,7 @@ class Protocol:
         node.send(params,node.buffer)
     def updateSearchState(self,mark):
         if mark=='forward':
-            middle=(self.searchEnd-self.searchStart)//2
+            middle=(self.searchEnd+self.searchStart)//2
             self.searchStack.append(middle)
             self.searchEnd=middle
         else:
